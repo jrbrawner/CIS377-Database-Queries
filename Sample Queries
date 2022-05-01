@@ -1,0 +1,115 @@
+--What are the 20 top selling products at each store?
+SELECT rank_filter.* FROM (
+SELECT O.store_id, SUM(I.item_qty) AS products_sold, I.Product_ID, B.Product_name,
+ROW_NUMBER() OVER (PARTITION BY o.store_id ORDER BY SUM(I.item_qty) DESC) as rank
+FROM Orders as O, item_order as I, Brands as B
+WHERE O.item_order_id = I.item_order_id AND I.Product_ID = B.Product_ID
+GROUP BY O.store_id, I.item_qty, I.Product_ID, B.Product_name
+ORDER BY O.store_id, rank, SUM(I.item_qty)
+ ) rank_filter WHERE RANK <= 20 
+
+--Top 20 selling products in each state
+SELECT rank_filter.* FROM (
+SELECT S.Store_state, SUM(I.item_qty) AS products_sold, I.Product_ID, B.Product_name,
+ROW_NUMBER() OVER (PARTITION BY S.store_state ORDER BY SUM(I.item_qty) DESC) as rank
+FROM Orders as O, item_order as I,Stores as S, Brands as B
+WHERE O.item_order_id = I.item_order_id AND I.Product_ID = B.Product_ID
+GROUP BY S.store_state, I.item_qty, I.Product_ID, B.Product_name
+ORDER BY S.store_state, rank, SUM(I.item_qty)
+ ) rank_filter WHERE RANK <= 20
+
+--Top 5 stores with most sales this year
+SELECT rank_filter.* FROM (
+SELECT O.store_id, SUM(O.order_grand_total) AS this_years_sales, S.store_state, S.store_city,
+DENSE_RANK () OVER (ORDER BY SUM(O.order_grand_total) DESC) as rank
+FROM Orders as O, Stores as S
+WHERE O.order_date between '2022-01-01' and '2022-04-018' AND O.store_id = S.store_id
+GROUP BY O.store_id, S.Store_state, S.Store_city
+ ) rank_filter WHERE RANK <= 5
+ ORDER BY RANK ASC
+
+--In how many stores does Amps Air Bluetooth Wireless Earbuds (Rose Gold) outsell Sennheiser - Earbud Headphones - Black
+WITH cte AS (
+	SELECT S.store_id, SUM(I.item_qty) as product_1_sold, I.product_id, B.product_name
+	FROM Stores as S, item_order as I, Orders as O, Brands as B
+	WHERE I.product_id = '730-lgv-452' AND S.store_id = O.store_id AND O.item_order_id = I.item_order_id AND B.product_name = 'Amps Air Bluetooth Wireless Earbuds (Rose Gold)'
+	GROUP BY S.store_id, I.product_id, B.product_name
+), cte2 AS (
+	SELECT S.store_id, SUM(I.item_qty) as product_2_sold, I.product_id, B.product_name
+	FROM Stores as S, item_order as I, Orders as O, Brands as B
+	WHERE I.product_id = '743-nqk-044' AND S.store_id = O.store_id AND O.item_order_id = I.item_order_id AND B.product_name = 'Sennheiser - Earbud Headphones - Black'
+	GROUP BY S.store_id, I.product_id, B.product_name
+)
+SELECT *
+FROM CTE, CTE2
+WHERE product_1_sold > product_2_sold AND CTE.store_id = CTE2.store_id
+
+--Top 3 products customers buy in addition to Apple - iPad mini 4 Wi-Fi + Cellular 128GB - Sprint - Silver?
+SELECT rank_filter.* FROM (
+WITH cte AS (
+SELECT SUM(item_qty), item_order_id, product_id
+FROM item_order
+WHERE Product_id LIKE('387-xyt-912')
+GROUP BY item_order_id, product_id
+ORDER BY SUM(item_qty) DESC 
+)
+SELECT SUM(item_qty), item_order.item_order_id, item_order.product_id, Brands.product_name,
+ROW_NUMBER () OVER (ORDER BY SUM(item_order.item_qty) DESC) as rank
+FROM item_order, cte, brands
+WHERE item_order.item_order_id = cte.item_order_id AND item_order.product_id != cte.product_id AND brands.product_id = item_order.product_id
+GROUP BY item_order.item_order_id, item_order.product_id, Brands.product_name
+ORDER BY SUM(item_order.item_qty) DESC
+) rank_filter WHERE RANK <= 3
+
+-- What are the 10 highest grossing categories?
+SELECT SUM(O.order_grand_total) as gross_sales, Pt.Pt_name as product_category
+FROM Orders as O, Product_types as Pt, item_order as I
+WHERE O.item_order_id = I.item_order_id AND I.Product_ID = Pt.Product_ID
+GROUP BY Pt.Pt_name
+ORDER BY gross_sales DESC
+LIMIT 10
+
+--Which brand provides our stores with the most products?
+SELECT COUNT(*) as product_count, brand_name
+FROM Brands
+GROUP BY brand_name
+ORDER BY product_count DESC
+
+--What cities do our customers reside in?
+SELECT COUNT(*), Customer_city
+FROM Customers
+GROUP BY Customer_city
+ORDER BY count DESC
+
+--What products have the highest margin?
+SELECT P.Product_sale_price, B.Brand_price, P.product_sale_price - B.Brand_price AS product_margin, B.product_name
+FROM Products as P, Brands as B
+WHERE P.Product_id = B.Product_id
+ORDER BY product_margin DESC
+
+--What items in our inventories are under quantity 3?
+SELECT I.product_qty_in_stock, I.store_id, B.product_name
+FROM Inventory as I, Brands as B
+WHERE Product_qty_in_stock < 3 AND I.product_id = B.product_id
+
+--What vendors supply store 9?
+SELECT DISTINCT V.vendor_name, V.vendor_phone
+FROM Vendor_stores as VS, Vendors as V
+where VS.store_id = 9 AND VS.Vendor_ID = V.Vendor_id;
+
+--How many orders utilize in store pickup at each store?
+WITH CTE as (SELECT COUNT(*) as count, O.order_instore_pickup, S.store_id
+FROM Orders as O, Stores as S
+WHERE O.order_instore_pickup = TRUE AND o.store_id = S.store_id
+GROUP BY O.order_instore_pickup, S.store_id
+ORDER BY store_id
+),
+cte2 as (SELECT count(*) as count1, S.store_id
+FROM Orders as O, Stores as S
+WHERE O.store_id = S.store_id
+GROUP BY S.store_id
+ORDER BY store_id
+)
+SELECT CTE.store_id, ROUND(CAST(count AS decimal)/CAST(count1 AS decimal),2) as ratio_orders_instore_pickup
+FROM CTE, CTE2
+WHERE CTE.store_id = CTE2.store_id
